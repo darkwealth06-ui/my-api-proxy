@@ -1,79 +1,66 @@
 export default async function handler(req, res) {
-  // Catch the path after /api/ (e.g. balance, servers, buy)
+  // Get the path after /api/ (e.g. balance.php, servers.php)
   const pathArray = req.query.path || [];
   const urlPath = pathArray.join('/');
 
-  const baseUrl = 'https://socialsmswrld.com/api/reseller/v1/';  // Your real base URL
+  // Your real API base URL
+  const baseUrl = 'https://socialsmswrld.com/api/reseller/v1/';
 
-  // Put your REAL API KEY here (copy from your dashboard - OTPAPI_LIVE_... one)
-  const apiKey = 'OTPAPI_LIVE_1_9583535a0d62f93771defbf1b2fdbe89b445ac8c';  // ← CHANGE THIS! Example: 'OTPAPI_LIVE_958835...'
+  // Your real API key (keep this secret!)
+  const apiKey = 'OTPAPI_LIVE_1_9583535a0d62f93771defbf1b2fdbe89b445ac8c';  // ← Replace with your OTPAPI_LIVE_... key
 
   const targetUrl = baseUrl + urlPath;
 
-  // Forward original headers + add your api_key as X-API-KEY header
+  // Headers: forward original + add your key + browser-like User-Agent
   const headers = {
     ...req.headers,
-    'Content-Type': 'application/json',  // Most endpoints expect JSON
-    'X-API-KEY': apiKey,               // This is the key line — adds your key automatically
+    'Content-Type': 'application/json',
+    'X-API-KEY': apiKey,                    // The required header for auth
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'  // Helps avoid blocks/redirects
   };
 
-  // Clean up problematic headers
+  // Clean up headers that cause problems
   delete headers.host;
   delete headers.connection;
 
-  // ... (keep your existing code above, like path, baseUrl, headers, apiKey)
+  // Add timeout controller to prevent hanging forever
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 seconds
 
-// Add this before fetch
-const controller = new AbortController();
-const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 seconds
-
-try {
-  const response = await fetch(targetUrl + '?' + new URLSearchParams(req.query), {
-    method: req.method,
-    headers: headers,
-    body: req.method !== 'GET' && req.method !== 'HEAD' ? JSON.stringify(req.body) : undefined,
-    signal: controller.signal  // Enforces timeout
-  });
-
-  clearTimeout(timeoutId);
-
-  const data = await response.text();
-
-  res.setHeader('Content-Type', response.headers.get('content-type') || 'application/json');
-  res.status(response.status).send(data);
-} catch (error) {
-  clearTimeout(timeoutId);
-
-  // Better details for debugging
-  const errorInfo = {
-    message: error.message,
-    code: error.code || 'unknown',
-    name: error.name,
-    cause: error.cause ? error.cause.message : 'no cause',
-    fullStack: error.stack ? error.stack.substring(0, 500) : 'no stack'
-  };
-
-  console.error('Proxy fetch error:', errorInfo); // Shows in Vercel logs
-
-  res.status(500).json({ 
-    error: 'Proxy failed', 
-    details: JSON.stringify(errorInfo)
-  });
-}
   try {
-    // Forward the request (GET/POST/etc.) + any query params or body
     const response = await fetch(targetUrl + '?' + new URLSearchParams(req.query), {
       method: req.method,
       headers: headers,
       body: req.method !== 'GET' && req.method !== 'HEAD' ? JSON.stringify(req.body) : undefined,
+      signal: controller.signal,          // Enforces timeout
+      redirect: 'manual'                  // ← KEY FIX: Do NOT auto-follow redirects (prevents "redirect count exceeded")
     });
 
+    clearTimeout(timeoutId);
+
+    // Get the response as text (works for JSON, HTML, etc.)
     const data = await response.text();
 
-    // Copy back content type and status
+    // Forward content type and status
     res.setHeader('Content-Type', response.headers.get('content-type') || 'application/json');
     res.status(response.status).send(data);
   } catch (error) {
-    res.status(500).json({ error: 'Proxy failed', details: error.message });
+    clearTimeout(timeoutId);
+
+    // Detailed error for debugging
+    const errorInfo = {
+      message: error.message,
+      code: error.code || 'unknown',
+      name: error.name,
+      cause: error.cause ? error.cause.message : 'no cause',
+      fullStack: error.stack ? error.stack.substring(0, 500) : 'no stack'
+    };
+
+    console.error('Proxy fetch error:', errorInfo); // Logs to Vercel console
+
+    res.status(500).json({ 
+      error: 'Proxy failed', 
+      details: JSON.stringify(errorInfo)
+    });
   }
 }
