@@ -7,7 +7,7 @@ const port = process.env.PORT || 3000;
 app.use(express.json());
 
 // Your base URL and key
-const baseUrl = 'https://socialsmswrld.com/reseller-docs.php';
+const baseUrl = 'https://socialsmswrld.com/api/reseller/v1/';
 const apiKey = 'OTPAPI_LIVE_1_9583535a0d62f93771defbf1b2fdbe89b445ac8c'; // ← Replace with your OTPAPI_LIVE_... key
 
 // Catch-all route for /api/*
