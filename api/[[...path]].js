@@ -21,6 +21,45 @@ export default async function handler(req, res) {
   delete headers.host;
   delete headers.connection;
 
+  // ... (keep your existing code above, like path, baseUrl, headers, apiKey)
+
+// Add this before fetch
+const controller = new AbortController();
+const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 seconds
+
+try {
+  const response = await fetch(targetUrl + '?' + new URLSearchParams(req.query), {
+    method: req.method,
+    headers: headers,
+    body: req.method !== 'GET' && req.method !== 'HEAD' ? JSON.stringify(req.body) : undefined,
+    signal: controller.signal  // Enforces timeout
+  });
+
+  clearTimeout(timeoutId);
+
+  const data = await response.text();
+
+  res.setHeader('Content-Type', response.headers.get('content-type') || 'application/json');
+  res.status(response.status).send(data);
+} catch (error) {
+  clearTimeout(timeoutId);
+
+  // Better details for debugging
+  const errorInfo = {
+    message: error.message,
+    code: error.code || 'unknown',
+    name: error.name,
+    cause: error.cause ? error.cause.message : 'no cause',
+    fullStack: error.stack ? error.stack.substring(0, 500) : 'no stack'
+  };
+
+  console.error('Proxy fetch error:', errorInfo); // Shows in Vercel logs
+
+  res.status(500).json({ 
+    error: 'Proxy failed', 
+    details: JSON.stringify(errorInfo)
+  });
+}
   try {
     // Forward the request (GET/POST/etc.) + any query params or body
     const response = await fetch(targetUrl + '?' + new URLSearchParams(req.query), {
